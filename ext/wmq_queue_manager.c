@@ -1027,8 +1027,11 @@ struct QueueManager_singleton_connect_arg {
     VALUE proc;
 };
 
-static VALUE QueueManager_singleton_connect_body2(struct QueueManager_singleton_connect_arg* arg)
+static VALUE QueueManager_singleton_connect_body2(VALUE arg_val)
 {
+    // Extract the struct pointer from the generic Ruby VALUE
+    struct QueueManager_singleton_connect_arg* arg = (struct QueueManager_singleton_connect_arg*)arg_val;
+
     return rb_funcall(arg->proc, ID_call, 1, arg->self);
 }
 
@@ -1048,8 +1051,11 @@ static VALUE QueueManager_singleton_connect_rescue(VALUE self)
     return Qnil;
 }
 
-static VALUE QueueManager_singleton_connect_body(struct QueueManager_singleton_connect_arg* arg)
+static VALUE QueueManager_singleton_connect_body(VALUE arg_val)
 {
+    // Extract the struct pointer from the generic Ruby VALUE
+    struct QueueManager_singleton_connect_arg* arg = (struct QueueManager_singleton_connect_arg*)arg_val;
+
     return rb_rescue2(QueueManager_singleton_connect_body2, (VALUE)arg,
                       QueueManager_singleton_connect_rescue, arg->self,
                       rb_eException, 0);
