@@ -1010,7 +1010,7 @@ static VALUE Queue_singleton_open_body(VALUE arg_val)
 {
     // Cast the generic VALUE back to your struct pointer
     struct Queue_singleton_open_arg *parg = (struct Queue_singleton_open_arg *)arg_val;
-    rb_funcall(arg->proc, ID_call, 1, arg->queue);
+    rb_funcall(parg->proc, ID_call, 1, parg->queue);
     return Qnil;
 }
 
