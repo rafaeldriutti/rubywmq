@@ -552,8 +552,11 @@ MQLONG Message_deblock_rf_header_2 (VALUE hash, PMQBYTE p_buffer, MQLONG data_le
     return size;
 }
 
-static VALUE Message_build_rf_header_2_each(VALUE element, struct Message_build_header_arg* parg)
+static VALUE Message_build_rf_header_2_each(VALUE element, VALUE arg_val, int argc, const VALUE *argv, VALUE blockarg)
 {
+    // Extract the struct pointer from the generic Ruby VALUE
+    struct Message_build_header_arg* parg = (struct Message_build_header_arg*)arg_val;
+
     VALUE  str = StringValue(element);
     MQLONG length = RSTRING_LEN(str);
 
