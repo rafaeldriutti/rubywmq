@@ -976,7 +976,7 @@ VALUE QueueManager_name(VALUE self)
     return rb_iv_get(self,"@name");
 }
 
-static VALUE QueueManager_open_queue_block(VALUE message, VALUE proc)
+static VALUE QueueManager_open_queue_block(VALUE yielded_val, VALUE proc, int argc, const VALUE *argv, VALUE blockarg)
 {
     return rb_funcall(proc, ID_call, 1, message);
 }
