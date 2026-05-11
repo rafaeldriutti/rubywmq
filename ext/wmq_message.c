@@ -322,7 +322,7 @@ struct Message_build_rf_header_each_value_arg {
 static VALUE Message_build_rf_header_each_value(VALUE value, VALUE arg_val, int argc, const VALUE *argv, VALUE blockarg)
 {
     // Cast the VALUE back to your struct pointer type
-    struct Message_build_rf_header_each_value_arg *arg = (struct Message_build_rf_header_each_value_arg *)arg_val;
+    struct Message_build_rf_header_each_value_arg *parg = (struct Message_build_rf_header_each_value_arg *)arg_val;
 
     Message_name_value_concat(parg->string, parg->key);
     rb_str_concat(parg->string, parg->space);
