@@ -645,7 +645,7 @@ void Message_build_rf_header_2(VALUE hash, struct Message_build_header_arg* parg
         }
         else if(TYPE(xml) != T_STRING)
         {
-            Message_build_rf_header_2_each(xml, parg);
+            Message_build_rf_header_2_each(xml, (VALUE)parg, 0, NULL, Qnil);
         }
         else
         {
