@@ -1035,7 +1035,7 @@ static VALUE QueueManager_singleton_connect_body2(VALUE arg_val)
     return rb_funcall(arg->proc, ID_call, 1, arg->self);
 }
 
-static VALUE QueueManager_singleton_connect_rescue(VALUE self)
+static VALUE QueueManager_singleton_connect_rescue(VALUE self, VALUE exception)
 {
     PQUEUE_MANAGER pqm;
     VALUE          exception;
@@ -1260,8 +1260,11 @@ if(pqm->comp_code != MQCC_OK)                                                   
     return Qfalse;                                                                        \
 }
 
-static int QueueManager_execute_each (VALUE key, VALUE value, PQUEUE_MANAGER pqm)
+static int QueueManager_execute_each(VALUE key, VALUE val, VALUE arg_val)
 {
+    // Cast the generic VALUE back to your strict QUEUE_MANAGER pointer
+    QUEUE_MANAGER *pqm = (QUEUE_MANAGER *)arg_val;
+    
     MQLONG selector_type, selector;
     VALUE  str;
     ID selector_id = rb_to_id(key);
