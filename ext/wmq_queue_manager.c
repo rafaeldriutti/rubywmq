@@ -1038,7 +1038,7 @@ static VALUE QueueManager_singleton_connect_body2(VALUE arg_val)
 static VALUE QueueManager_singleton_connect_rescue(VALUE self, VALUE exception)
 {
     PQUEUE_MANAGER pqm;
-    VALUE          exception;
+    //VALUE          exception;
     Data_Get_Struct(self, QUEUE_MANAGER, pqm);
 
     if(pqm->trace_level) printf("WMQ::QueueManager.connect() Backing out due to unhandled exception\n");
@@ -1264,7 +1264,7 @@ static int QueueManager_execute_each(VALUE key, VALUE val, VALUE arg_val)
 {
     // Cast the generic VALUE back to your strict QUEUE_MANAGER pointer
     QUEUE_MANAGER *pqm = (QUEUE_MANAGER *)arg_val;
-    
+
     MQLONG selector_type, selector;
     VALUE  str;
     ID selector_id = rb_to_id(key);
