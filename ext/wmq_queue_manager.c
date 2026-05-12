@@ -1260,7 +1260,7 @@ if(pqm->comp_code != MQCC_OK)                                                   
     return Qfalse;                                                                        \
 }
 
-static int QueueManager_execute_each(VALUE key, VALUE val, VALUE arg_val)
+static int QueueManager_execute_each(VALUE key, VALUE value, VALUE arg_val)
 {
     // Cast the generic VALUE back to your strict QUEUE_MANAGER pointer
     QUEUE_MANAGER *pqm = (QUEUE_MANAGER *)arg_val;
