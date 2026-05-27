@@ -318,8 +318,12 @@ struct Message_build_rf_header_each_value_arg {
     VALUE    space;
 };
 
-static VALUE Message_build_rf_header_each_value(VALUE value, struct Message_build_rf_header_each_value_arg* parg)
+//static VALUE Message_build_rf_header_each_value(VALUE value, struct Message_build_rf_header_each_value_arg* parg)
+static VALUE Message_build_rf_header_each_value(VALUE value, VALUE arg_val, int argc, const VALUE *argv, VALUE blockarg)
 {
+    // Cast the VALUE back to your struct pointer type
+    struct Message_build_rf_header_each_value_arg *parg = (struct Message_build_rf_header_each_value_arg *)arg_val;
+
     Message_name_value_concat(parg->string, parg->key);
     rb_str_concat(parg->string, parg->space);
     Message_name_value_concat(parg->string, value);
@@ -548,8 +552,11 @@ MQLONG Message_deblock_rf_header_2 (VALUE hash, PMQBYTE p_buffer, MQLONG data_le
     return size;
 }
 
-static VALUE Message_build_rf_header_2_each(VALUE element, struct Message_build_header_arg* parg)
+static VALUE Message_build_rf_header_2_each(VALUE element, VALUE arg_val, int argc, const VALUE *argv, VALUE blockarg)
 {
+    // Extract the struct pointer from the generic Ruby VALUE
+    struct Message_build_header_arg* parg = (struct Message_build_header_arg*)arg_val;
+
     VALUE  str = StringValue(element);
     MQLONG length = RSTRING_LEN(str);
 
@@ -638,7 +645,7 @@ void Message_build_rf_header_2(VALUE hash, struct Message_build_header_arg* parg
         }
         else if(TYPE(xml) != T_STRING)
         {
-            Message_build_rf_header_2_each(xml, parg);
+            Message_build_rf_header_2_each(xml, (VALUE)parg, 0, NULL, Qnil);
         }
         else
         {
