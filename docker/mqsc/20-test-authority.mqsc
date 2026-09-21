@@ -1,0 +1,17 @@
+* Grants the 'app' dev user (see MQ_APP_PASSWORD / DEV.APP.SVRCONN in the
+* built-in dev config, 10-dev.mqsc) the extra authority the rubywmq test
+* suite needs beyond the DEV.** queues it's normally scoped to. Runs
+* automatically at queue manager startup (files under /etc/mqm/ are picked
+* up in filename order); does not touch CHLAUTH/CONNAUTH.
+
+* test/queue_manager_test.rb opens SYSTEM.DEFAULT.MODEL.QUEUE to create a
+* dynamic UNIT.TEST.* queue from it
+SET AUTHREC PROFILE('SYSTEM.DEFAULT.MODEL.QUEUE') PRINCIPAL('app') OBJTYPE(QUEUE) AUTHADD(BROWSE,DSP,GET,INQ,PUT)
+SET AUTHREC PROFILE('UNIT.TEST.**') PRINCIPAL('app') OBJTYPE(QUEUE) AUTHADD(BROWSE,DSP,GET,INQ,PUT,CRT,DLT,CHG)
+
+* QueueManager#mqsc / #execute issue admin commands via the command queue
+SET AUTHREC PROFILE('SYSTEM.ADMIN.COMMAND.QUEUE') PRINCIPAL('app') OBJTYPE(QUEUE) AUTHADD(PUT,INQ)
+SET AUTHREC PRINCIPAL('app') OBJTYPE(QMGR) AUTHADD(DSP)
+
+* QueueManager#inquire_process(process_name: '*') displays SYSTEM.DEFAULT.PROCESS
+SET AUTHREC PROFILE('SYSTEM.DEFAULT.PROCESS') PRINCIPAL('app') OBJTYPE(PROCESS) AUTHADD(DSP)
