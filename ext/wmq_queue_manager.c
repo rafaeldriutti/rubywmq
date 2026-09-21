@@ -108,6 +108,10 @@ void QUEUE_MANAGER_free(void* p)
         pqm->MQBACK(pqm->hcon, &pqm->comp_code, &pqm->reason_code);
         pqm->MQDISC(&pqm->hcon, &pqm->comp_code, &pqm->reason_code);
     }
+  #ifdef MQCNO_VERSION_5
+    free(pqm->csp_user_id_ptr);
+    free(pqm->csp_password_ptr);
+  #endif
   #ifdef MQCD_VERSION_6
     free(pqm->long_remote_user_id_ptr);
   #endif
@@ -139,6 +143,9 @@ VALUE QUEUE_MANAGER_alloc(VALUE klass)
   #ifdef MQCNO_VERSION_4
     static MQSCO default_MQSCO = {MQSCO_DEFAULT};
   #endif
+  #ifdef MQCNO_VERSION_5
+    static MQCSP default_MQCSP = {MQCSP_DEFAULT};
+  #endif
 
     PQUEUE_MANAGER pqm = ALLOC(QUEUE_MANAGER);
 
@@ -158,6 +165,11 @@ VALUE QUEUE_MANAGER_alloc(VALUE klass)
   #endif
   #ifdef MQCNO_VERSION_4
     memcpy(&pqm->ssl_config_opts, &default_MQSCO, sizeof(MQSCO));
+  #endif
+  #ifdef MQCNO_VERSION_5
+    memcpy(&pqm->security_parms, &default_MQCSP, sizeof(MQCSP));
+    pqm->csp_user_id_ptr  = 0;
+    pqm->csp_password_ptr = 0;
   #endif
   #ifdef MQCD_VERSION_6
     pqm->long_remote_user_id_ptr = 0;
@@ -262,6 +274,53 @@ VALUE QueueManager_initialize(VALUE self, VALUE hash)
         WMQ_HASH2MQCHARS(hash,receive_user_data,           pmqcd->ReceiveUserData)
         WMQ_HASH2MQCHARS(hash,user_identifier,             pmqcd->UserIdentifier)
         WMQ_HASH2MQCHARS(hash,password,                    pmqcd->Password)
+
+    #ifdef MQCNO_VERSION_5
+        /*
+         * Also populate MQCSP with the same credentials. Queue Managers
+         * configured to require CONNAUTH/CHLAUTH password checks (the
+         * default from MQ 9 onwards, e.g. CHCKCLNT(REQUIRED)) validate the
+         * MQCSP structure, not the legacy MQCD UserIdentifier/Password
+         * fields above, so both must be sent for such Queue Managers to
+         * authenticate the connection.
+         */
+        val = rb_hash_aref(hash, ID2SYM(ID_user_identifier));
+        if (!NIL_P(val))
+        {
+            str = StringValue(val);
+            length = RSTRING_LEN(str);
+            if (length > 0)
+            {
+                MQPTR pBuffer = ALLOC_N(char, length);
+                memcpy(pBuffer, RSTRING_PTR(str), length);
+                pqm->csp_user_id_ptr                   = pBuffer;
+                pqm->security_parms.CSPUserIdPtr       = pBuffer;
+                pqm->security_parms.CSPUserIdLength    = (MQLONG)length;
+                pqm->security_parms.AuthenticationType = MQCSP_AUTH_USER_ID_AND_PWD;
+            }
+        }
+
+        val = rb_hash_aref(hash, ID2SYM(ID_password));
+        if (!NIL_P(val))
+        {
+            str = StringValue(val);
+            length = RSTRING_LEN(str);
+            if (length > 0)
+            {
+                MQPTR pBuffer = ALLOC_N(char, length);
+                memcpy(pBuffer, RSTRING_PTR(str), length);
+                pqm->csp_password_ptr                  = pBuffer;
+                pqm->security_parms.CSPPasswordPtr     = pBuffer;
+                pqm->security_parms.CSPPasswordLength  = (MQLONG)length;
+                pqm->security_parms.AuthenticationType = MQCSP_AUTH_USER_ID_AND_PWD;
+            }
+        }
+
+        if (pqm->security_parms.AuthenticationType == MQCSP_AUTH_USER_ID_AND_PWD)
+        {
+            pqm->connect_options.SecurityParmsPtr = &pqm->security_parms;
+        }
+    #endif
 
         /* Default channel name to system default */
         val = rb_hash_aref(hash, ID2SYM(ID_channel_name));

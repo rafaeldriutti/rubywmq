@@ -50,6 +50,7 @@ WORKDIR /app
 COPY . .
 
 RUN bundle install \
+    && cd ext && ruby extconf.rb && make && make install && cd .. \
     && gem build rubywmq.gemspec \
     && gem install ./rubywmq-*.gem
 

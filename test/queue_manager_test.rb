@@ -2,9 +2,26 @@ require_relative 'test_helper'
 
 # Unit Test for RocketJob::Job
 class WMQTest < Minitest::Test
+  # Client-mode connection details, used when running against a Queue Manager
+  # in a separate container (see docker-compose.yml). Falls back to a local
+  # bindings connection when MQ_CONNECTION_NAME is not set.
+  def self.client_connection_params
+    return {} unless ENV['MQ_CONNECTION_NAME']
+
+    {
+      connection_name: ENV['MQ_CONNECTION_NAME'],
+      channel_name:    ENV.fetch('MQ_CHANNEL_NAME', 'SYSTEM.DEF.SVRCONN'),
+      user_identifier: ENV['MQ_USER_IDENTIFIER'],
+      password:        ENV['MQ_PASSWORD']
+    }.compact
+  end
+
   context WMQ do
     setup do
-      @queue_manager = WMQ::QueueManager.new(q_mgr_name: 'TEST') #, connection_name: 'localhost(1414)')
+      @queue_manager = WMQ::QueueManager.new(
+        q_mgr_name: ENV.fetch('MQ_QMGR_NAME', 'TEST'),
+        **WMQTest.client_connection_params
+      )
       @queue_manager.connect
 
       # Create Queue and clear any messages from the queue

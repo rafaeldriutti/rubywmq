@@ -97,6 +97,11 @@ extern VALUE wmq_exception;
   #ifdef MQCNO_VERSION_4
     MQSCO    ssl_config_opts;         /* Security options              */
   #endif
+  #ifdef MQCNO_VERSION_5
+    MQCSP    security_parms;          /* MQCSP Connection Security Parms */
+    MQPTR    csp_user_id_ptr;
+    MQPTR    csp_password_ptr;
+  #endif
   #ifdef MQCD_VERSION_6
     MQPTR    long_remote_user_id_ptr;
   #endif
