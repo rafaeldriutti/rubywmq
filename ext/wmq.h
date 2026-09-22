@@ -101,6 +101,12 @@ extern VALUE wmq_exception;
     MQCSP    security_parms;          /* MQCSP Connection Security Parms */
     MQPTR    csp_user_id_ptr;
     MQPTR    csp_password_ptr;
+    #ifdef MQCSP_VERSION_3
+    MQPTR    csp_token_ptr;           /* OAuth/OIDC bearer token          */
+    #endif
+  #endif
+  #ifdef MQCNO_VERSION_6
+    MQPTR    ccdt_url_ptr;            /* CCDT URL string                  */
   #endif
   #ifdef MQCD_VERSION_6
     MQPTR    long_remote_user_id_ptr;

@@ -95,6 +95,9 @@ END_OF_STRING
       ['Put Message Options', 'cmqc.h', 'MQPMO_', /(VERSION)|(LENGTH)/],
       ['Put Message Record Fields', 'cmqc.h', 'MQPMRF_', /(VERSION)|(LENGTH)/],
       ['Reason Codes', 'cmqc.h', 'MQRC_'],
+      ['Connection Security Parameters (MQCSP) Authentication Types', 'cmqc.h', 'MQCSP_', /(VERSION)|(LENGTH)/],
+      ['SSL/TLS Certificate Validation Policy', 'cmqc.h', 'MQ_CERT_VAL_POLICY_'],
+      ['Client Automatic Reconnect Options', 'cmqxc.h', 'MQRCN_'],
     ].each do |item|
       str << "\n# #{item[0]}\n"
       str << GenerateConst.rb_const("#{path}/#{item[1]}", item[2], item[3])

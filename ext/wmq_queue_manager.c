@@ -35,9 +35,18 @@ static ID ID_ssl_peer_name;
 static ID ID_keep_alive_interval;
 static ID ID_crypto_hardware;
 static ID ID_use_system_connection_data;
+static ID ID_ccdt_url;
+static ID ID_appl_name;
+static ID ID_def_reconnect;
+
+/* MQCSP ID's */
+static ID ID_token;
 
 /* MQSCO ID's */
 static ID ID_key_repository;
+static ID ID_certificate_label;
+static ID ID_certificate_val_policy;
+static ID ID_fips_required;
 
 /* Admin ID's */
 static ID ID_create_queue;
@@ -80,10 +89,19 @@ void QueueManager_id_init(void)
     ID_ssl_peer_name               = rb_intern("ssl_peer_name");
     ID_keep_alive_interval         = rb_intern("keep_alive_interval");
     ID_use_system_connection_data  = rb_intern("use_system_connection_data");
+    ID_ccdt_url                    = rb_intern("ccdt_url");
+    ID_appl_name                   = rb_intern("appl_name");
+    ID_def_reconnect               = rb_intern("def_reconnect");
+
+    /* MQCSP ID's */
+    ID_token                 = rb_intern("token");
 
     /* MQSCO ID's */
-    ID_key_repository       = rb_intern("key_repository");
-    ID_crypto_hardware      = rb_intern("crypto_hardware");
+    ID_key_repository         = rb_intern("key_repository");
+    ID_crypto_hardware        = rb_intern("crypto_hardware");
+    ID_certificate_label      = rb_intern("certificate_label");
+    ID_certificate_val_policy = rb_intern("certificate_val_policy");
+    ID_fips_required          = rb_intern("fips_required");
 
     /* Admin ID's */
     ID_create_queue         = rb_intern("create_queue");
@@ -111,6 +129,12 @@ void QUEUE_MANAGER_free(void* p)
   #ifdef MQCNO_VERSION_5
     free(pqm->csp_user_id_ptr);
     free(pqm->csp_password_ptr);
+    #ifdef MQCSP_VERSION_3
+    free(pqm->csp_token_ptr);
+    #endif
+  #endif
+  #ifdef MQCNO_VERSION_6
+    free(pqm->ccdt_url_ptr);
   #endif
   #ifdef MQCD_VERSION_6
     free(pqm->long_remote_user_id_ptr);
@@ -162,14 +186,37 @@ VALUE QUEUE_MANAGER_alloc(VALUE klass)
     /* Tell MQ to use Client Conn structures, etc. */
     pqm->connect_options.Version = MQCNO_CURRENT_VERSION;
     pqm->connect_options.ClientConnPtr = &pqm->client_conn;
+
+    /*
+     * Request the newest MQCD layout the headers used to compile this
+     * extension support (e.g. DefReconnect, added at Version 9), so that
+     * fields beyond Version 6 are honoured when populated below. Any field
+     * introduced by a newer version that we never populate is left at its
+     * zero/default value by the MQCD_CLIENT_CONN_DEFAULT initializer above.
+     */
+    pqm->client_conn.Version = MQCD_CURRENT_VERSION;
   #endif
   #ifdef MQCNO_VERSION_4
     memcpy(&pqm->ssl_config_opts, &default_MQSCO, sizeof(MQSCO));
+
+    /* As above, request the newest MQSCO layout available (e.g.
+     * CertificateLabel, CertificateValPolicy) so it is honoured when set. */
+    pqm->ssl_config_opts.Version = MQSCO_CURRENT_VERSION;
   #endif
   #ifdef MQCNO_VERSION_5
     memcpy(&pqm->security_parms, &default_MQCSP, sizeof(MQCSP));
     pqm->csp_user_id_ptr  = 0;
     pqm->csp_password_ptr = 0;
+    #ifdef MQCSP_VERSION_3
+    pqm->csp_token_ptr = 0;
+
+    /* Request the newest MQCSP layout so that TokenPtr (id token / OIDC
+     * bearer token auth) is honoured when set. */
+    pqm->security_parms.Version = MQCSP_CURRENT_VERSION;
+    #endif
+  #endif
+  #ifdef MQCNO_VERSION_6
+    pqm->ccdt_url_ptr = 0;
   #endif
   #ifdef MQCD_VERSION_6
     pqm->long_remote_user_id_ptr = 0;
@@ -242,8 +289,15 @@ VALUE QueueManager_initialize(VALUE self, VALUE hash)
      */
 #ifdef MQCNO_VERSION_2
     int use_system_connection_data = (rb_hash_aref(hash, ID2SYM(ID_use_system_connection_data)) == Qtrue) ? 1 : 0;
+  #ifdef MQCNO_VERSION_6
+    VALUE ccdt_url_val = rb_hash_aref(hash, ID2SYM(ID_ccdt_url));
+  #endif
 
-    if(!NIL_P(rb_hash_aref(hash, ID2SYM(ID_connection_name))) || use_system_connection_data)
+    if(!NIL_P(rb_hash_aref(hash, ID2SYM(ID_connection_name))) || use_system_connection_data
+  #ifdef MQCNO_VERSION_6
+        || !NIL_P(ccdt_url_val)
+  #endif
+      )
     {
         PMQCD pmqcd = &pqm->client_conn;              /* Process MQCD */
         pqm->is_client_conn = 1;                      /* Set to Client connection */
@@ -257,6 +311,17 @@ VALUE QueueManager_initialize(VALUE self, VALUE hash)
              */
             pqm->connect_options.ClientConnPtr = NULL;
         }
+  #ifdef MQCNO_VERSION_6
+        else if (!NIL_P(ccdt_url_val))
+        {
+            /*
+             * Connection details (host, port, TLS) are resolved from the
+             * CCDT referenced by ccdt_url (processed further below).
+             * ConnectionName is left blank; channel_name (below) still
+             * selects which CCDT entry to use.
+             */
+        }
+  #endif
         else
         {
             WMQ_HASH2MQCHARS(hash,connection_name,             pmqcd->ConnectionName)
@@ -316,7 +381,36 @@ VALUE QueueManager_initialize(VALUE self, VALUE hash)
             }
         }
 
-        if (pqm->security_parms.AuthenticationType == MQCSP_AUTH_USER_ID_AND_PWD)
+    #ifdef MQCSP_VERSION_3
+        /*
+         * OAuth/OIDC bearer token authentication, used instead of (or as
+         * well as) a user id and password when the Queue Manager is
+         * configured with an AUTHINFO of TYPE(OIDC) - available from
+         * MQ 9.1.2, and the common way to authenticate client connections
+         * to cloud-hosted Queue Managers.
+         */
+        val = rb_hash_aref(hash, ID2SYM(ID_token));
+        if (!NIL_P(val))
+        {
+            str = StringValue(val);
+            length = RSTRING_LEN(str);
+            if (length > 0)
+            {
+                MQPTR pBuffer = ALLOC_N(char, length);
+                memcpy(pBuffer, RSTRING_PTR(str), length);
+                pqm->csp_token_ptr                     = pBuffer;
+                pqm->security_parms.TokenPtr           = pBuffer;
+                pqm->security_parms.TokenLength        = (MQLONG)length;
+                pqm->security_parms.AuthenticationType = MQCSP_AUTH_ID_TOKEN;
+            }
+        }
+    #endif
+
+        if (pqm->security_parms.AuthenticationType == MQCSP_AUTH_USER_ID_AND_PWD
+    #ifdef MQCSP_VERSION_3
+            || pqm->security_parms.AuthenticationType == MQCSP_AUTH_ID_TOKEN
+    #endif
+           )
         {
             pqm->connect_options.SecurityParmsPtr = &pqm->security_parms;
         }
@@ -332,6 +426,22 @@ VALUE QueueManager_initialize(VALUE self, VALUE hash)
         {
             WMQ_HASH2MQCHARS(hash,channel_name,            pmqcd->ChannelName)
         }
+
+    #ifdef MQCNO_VERSION_6
+        if (!NIL_P(ccdt_url_val))
+        {
+            str = StringValue(ccdt_url_val);
+            length = RSTRING_LEN(str);
+            if (length > 0)
+            {
+                MQPTR pBuffer = ALLOC_N(char, length);
+                memcpy(pBuffer, RSTRING_PTR(str), length);
+                pqm->ccdt_url_ptr                  = pBuffer;
+                pqm->connect_options.CCDTUrlPtr    = pBuffer;
+                pqm->connect_options.CCDTUrlLength = (MQLONG)length;
+            }
+        }
+    #endif
 
     #ifdef MQCD_VERSION_4
         WMQ_HASH2MQLONG(hash,heartbeat_interval,          pmqcd->HeartbeatInterval)
@@ -402,14 +512,37 @@ VALUE QueueManager_initialize(VALUE self, VALUE hash)
         * Any SSL info in the client channel definition tables is also ignored
         */
         if (!NIL_P(rb_hash_aref(hash, ID2SYM(ID_key_repository))) ||
-            !NIL_P(rb_hash_aref(hash, ID2SYM(ID_crypto_hardware))))
+            !NIL_P(rb_hash_aref(hash, ID2SYM(ID_crypto_hardware))) ||
+            !NIL_P(rb_hash_aref(hash, ID2SYM(ID_fips_required)))
+      #ifdef MQSCO_VERSION_3
+            || !NIL_P(rb_hash_aref(hash, ID2SYM(ID_certificate_val_policy)))
+      #endif
+      #ifdef MQSCO_VERSION_4
+            || !NIL_P(rb_hash_aref(hash, ID2SYM(ID_certificate_label)))
+      #endif
+           )
         {
             /* Process MQSCO */
             WMQ_HASH2MQCHARS(hash,key_repository,              pqm->ssl_config_opts.KeyRepository)
             WMQ_HASH2MQCHARS(hash,crypto_hardware,             pqm->ssl_config_opts.CryptoHardware)
+            WMQ_HASH2BOOL   (hash,fips_required,                pqm->ssl_config_opts.FipsRequired)
+      #ifdef MQSCO_VERSION_3
+            WMQ_HASH2MQLONG (hash,certificate_val_policy,       pqm->ssl_config_opts.CertificateValPolicy)
+      #endif
+      #ifdef MQSCO_VERSION_4
+            WMQ_HASH2MQCHARS(hash,certificate_label,            pqm->ssl_config_opts.CertificateLabel)
+      #endif
 
             pqm->connect_options.SSLConfigPtr = &pqm->ssl_config_opts;
         }
+    #endif
+    #ifdef MQCD_VERSION_9
+        /*
+         * Client automatic reconnection, e.g. WMQ::MQRCN_YES /
+         * WMQ::MQRCN_Q_MGR - lets the client transparently reconnect after
+         * a transient connection failure instead of raising immediately.
+         */
+        WMQ_HASH2MQLONG(hash,def_reconnect,               pmqcd->DefReconnect)
     #endif
 
     }
@@ -422,6 +555,9 @@ VALUE QueueManager_initialize(VALUE self, VALUE hash)
 #ifdef MQCNO_VERSION_4
     /* Process MQCNO */
     WMQ_HASH2MQLONG(hash,connect_options,             pqm->connect_options.Options)
+#endif
+#ifdef MQCNO_VERSION_7
+    WMQ_HASH2MQCHARS(hash,appl_name,                  pqm->connect_options.ApplName)
 #endif
 
   /* --------------------------------------------------
@@ -1164,10 +1300,21 @@ static VALUE QueueManager_singleton_connect_ensure(VALUE self)
  *   password:            'LU6.2 Password',              # MQCD.Password
  *   long_remote_user_id: 'Long remote user identifier', # MQCD.LongRemoteUserId (Ptr, Length)
  *   ssl_peer_name:       'SSL Peer name',               # MQCD.SSLPeerName (Ptr, Length)
+ *   def_reconnect:       WMQ::MQRCN_Q_MGR,              # MQCD.DefReconnect
+ *   appl_name:           'My Application',              # MQCNO.ApplName
  *
- *   # SSL Options
- *   key_repository:      '/var/mqm/qmgrs/.../key',        # MQSCO.KeyRepository
- *   crypto_hardware:     'GSK_ACCELERATOR_NCIPHER_NF_ON', # MQSCO.CryptoHardware
+ *   # Connection Security Parameters (CONNAUTH / user based authentication)
+ *   token:                'OAuth/OIDC bearer token',    # MQCSP.Token (Ptr, Length)
+ *
+ *   # Client Channel Definition Table
+ *   ccdt_url:            'file:///var/mqm/ccdt.json',   # MQCNO.CCDTUrl (Ptr, Length)
+ *
+ *   # SSL/TLS Options
+ *   key_repository:        '/var/mqm/qmgrs/.../key',        # MQSCO.KeyRepository
+ *   crypto_hardware:       'GSK_ACCELERATOR_NCIPHER_NF_ON', # MQSCO.CryptoHardware
+ *   certificate_label:     'MyClientCertLabel',             # MQSCO.CertificateLabel
+ *   certificate_val_policy: WMQ::MQ_CERT_VAL_POLICY_RFC5280,# MQSCO.CertificateValPolicy
+ *   fips_required:          false,                          # MQSCO.FipsRequired
  *   )
  *
  * Optional Parameters
@@ -1242,6 +1389,26 @@ static VALUE QueueManager_singleton_connect_ensure(VALUE self)
  *   * to obtain the connection_name and channel_name from one of the system
  *   * configuration methods. These being: mqclient.ini file, MQSERVER ENV
  *   * variable or CCDT.
+ *
+ * * :ccdt_url => String
+ *   * Alternative to :connection_name. Initialises a client connection whose
+ *     connection details (host, port, TLS) are resolved from the Client
+ *     Channel Definition Table (JSON or binary) referenced by this URL,
+ *     e.g. 'file:///var/mqm/ccdt.json' or 'https://example.com/ccdt.json'.
+ *     :channel_name still selects which entry in the CCDT to use.
+ *
+ * * :token => String
+ *   * OAuth/OIDC bearer token used instead of :user_identifier/:password to
+ *     authenticate the connection (MQCSP), for Queue Managers configured
+ *     with an AUTHINFO of TYPE(OIDC).
+ *
+ * * :def_reconnect => FixNum
+ *   * Enables automatic client reconnection after a transient connection
+ *     failure. One of:
+ *       WMQ::MQRCN_NO       (default - do not reconnect)
+ *       WMQ::MQRCN_YES
+ *       WMQ::MQRCN_Q_MGR
+ *       WMQ::MQRCN_DISABLED
  *
  * For the Advanced Client Connection parameters, please see the WebSphere MQ documentation
  *

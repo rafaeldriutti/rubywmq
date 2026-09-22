@@ -122,6 +122,71 @@ class WMQTest < Minitest::Test
 
     end
 
+    context 'MQ 9 connection options' do
+      should 'accept a bearer token, without requiring a real OIDC provider' do
+        # There is no OIDC-configured AUTHINFO in the test Queue Manager, so
+        # this only exercises the MQCSP Token construction code path
+        # (buffer allocation, AuthenticationType) without connecting.
+        qmgr = WMQ::QueueManager.new(
+          q_mgr_name: ENV.fetch('MQ_QMGR_NAME', 'TEST'),
+          **WMQTest.client_connection_params,
+          token:      'dummy-oidc-bearer-token'
+        )
+        assert_equal WMQ::QueueManager, qmgr.class
+      end
+
+      should 'accept SSL/TLS certificate options, without a configured keystore' do
+        # No keystore/CertificateLabel is configured on the test channel, so
+        # this only exercises the MQSCO construction code path without
+        # connecting.
+        qmgr = WMQ::QueueManager.new(
+          q_mgr_name:              ENV.fetch('MQ_QMGR_NAME', 'TEST'),
+          **WMQTest.client_connection_params,
+          certificate_label:      'MyClientCertLabel',
+          certificate_val_policy: WMQ::MQ_CERT_VAL_POLICY_RFC5280,
+          fips_required:          false
+        )
+        assert_equal WMQ::QueueManager, qmgr.class
+      end
+
+      should 'connect with an application name and automatic reconnect option' do
+        skip 'def_reconnect only applies to client connections' unless ENV['MQ_CONNECTION_NAME']
+
+        WMQ::QueueManager.connect(
+          q_mgr_name: ENV.fetch('MQ_QMGR_NAME', 'TEST'),
+          **WMQTest.client_connection_params,
+          appl_name:     'rubywmq-test',
+          def_reconnect: WMQ::MQRCN_Q_MGR
+        ) do |qmgr|
+          assert_equal true, qmgr.put(q_name: @in_queue.name, data: 'MQ 9 options test')
+
+          message = WMQ::Message.new
+          assert_equal true, @in_queue.get(message: message)
+          assert_equal 'MQ 9 options test', message.data
+        end
+      end
+
+      should 'connect using a CCDT URL instead of connection_name' do
+        skip 'Only applicable to client connections' unless ENV['MQ_CONNECTION_NAME']
+
+        ccdt_path = File.expand_path('../docker/ccdt/ccdt.json', __dir__)
+
+        WMQ::QueueManager.connect(
+          q_mgr_name:      ENV.fetch('MQ_QMGR_NAME', 'TEST'),
+          ccdt_url:        "file://#{ccdt_path}",
+          channel_name:    ENV.fetch('MQ_CHANNEL_NAME', 'DEV.APP.SVRCONN'),
+          user_identifier: ENV['MQ_USER_IDENTIFIER'],
+          password:        ENV['MQ_PASSWORD']
+        ) do |qmgr|
+          assert_equal true, qmgr.put(q_name: @in_queue.name, data: 'CCDT test')
+
+          message = WMQ::Message.new
+          assert_equal true, @in_queue.get(message: message)
+          assert_equal 'CCDT test', message.data
+        end
+      end
+    end
+
     context 'Queue' do
       should 'send and receive message' do
         assert_equal @out_queue.put(data: 'Hello World'), true
