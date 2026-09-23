@@ -1,0 +1,17 @@
+{
+  "channel": [
+    {
+      "name": "DEV.APP.SVRCONN",
+      "type": "clientConnection",
+      "clientConnection": {
+        "connection": [
+          {
+            "host": "mq",
+            "port": 1414
+          }
+        ],
+        "queueManager": "TEST"
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+.git
+*.gem
+.idea
+.DS_Store
+ext/Makefile
+ext/*.o
+ext/wmq.so

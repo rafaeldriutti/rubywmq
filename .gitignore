@@ -10,3 +10,4 @@ ext/wmq.so
 .idea/*
 Gemfile.lock
 .bundle
+deps/

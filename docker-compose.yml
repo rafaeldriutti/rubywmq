@@ -1,0 +1,44 @@
+# Runs the test suite against a real IBM MQ queue manager.
+#
+#   docker compose run --rm test
+#
+# (or `podman-compose run --rm test`)
+#
+# The "mq" service is IBM's public MQ Advanced for Developers image, free for
+# non-production use. Starting it implies acceptance of the IBM MQ license
+# (https://www.ibm.com/support/customer/csol/terms/?id=L-APIG-C4MPKS), hence
+# LICENSE=accept below.
+#
+# On the very first `run` right after `mq` reports healthy, the channel
+# listener can occasionally still be finishing initialization; a connection
+# refused/reset here just means retry the `run` once.
+services:
+  mq:
+    image: icr.io/ibm-messaging/mq:latest
+    environment:
+      LICENSE: accept
+      MQ_QMGR_NAME: TEST
+      MQ_APP_PASSWORD: passw0rd
+    volumes:
+      - ./docker/mqsc/20-test-authority.mqsc:/etc/mqm/20-test-authority.mqsc:Z
+    healthcheck:
+      test: ["CMD", "chkmqhealthy"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  test:
+    build:
+      context: .
+      args:
+        MQ_TARBALL: 9.4.5.0-IBM-MQC-LinuxX64.tar.gz
+    depends_on:
+      mq:
+        condition: service_healthy
+    environment:
+      MQ_QMGR_NAME: TEST
+      MQ_CONNECTION_NAME: mq(1414)
+      MQ_CHANNEL_NAME: DEV.APP.SVRCONN
+      MQ_USER_IDENTIFIER: app
+      MQ_PASSWORD: passw0rd
+    command: ["bundle", "exec", "rake", "test"]
